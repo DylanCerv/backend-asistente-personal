@@ -2,6 +2,7 @@ const os = require("os");
 
 const { env, validateEnv } = require("./config");
 const { createLogger } = require("./utils/logger");
+const { isMockAuthEnabled } = require("./utils/mock-auth");
 
 validateEnv();
 
@@ -33,6 +34,12 @@ const server = app.listen(env.port, "0.0.0.0", () => {
   if (localIp) {
     logger.info(
       `Mobile devices (Expo Go): set EXPO_PUBLIC_API_BASE_URL=http://${localIp}:${env.port}/api`
+    );
+  }
+
+  if (isMockAuthEnabled()) {
+    logger.warn(
+      "DEV_MOCK_AUTH=true — login/register use in-memory users (no Supabase). Disable for production."
     );
   }
 });

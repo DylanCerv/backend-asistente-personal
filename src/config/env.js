@@ -1,11 +1,15 @@
 require("dotenv").config();
 
+const { isMockAuthEnabled } = require("../utils/mock-auth");
+
 const requiredEnvVars = [
   "SUPABASE_URL",
   "SUPABASE_ANON_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
   "OPENAI_API_KEY",
 ];
+
+const mockAuthEnvVars = [];
 
 function getEnv(name, defaultValue) {
   const value = process.env[name];
@@ -19,7 +23,8 @@ function getEnv(name, defaultValue) {
 }
 
 function validateEnv() {
-  const missing = requiredEnvVars.filter(
+  const envVarsToCheck = isMockAuthEnabled() ? mockAuthEnvVars : requiredEnvVars;
+  const missing = envVarsToCheck.filter(
     (name) => !process.env[name] || process.env[name].trim() === ""
   );
 

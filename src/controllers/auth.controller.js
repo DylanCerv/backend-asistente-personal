@@ -1,7 +1,13 @@
 const AuthService = require("../services/auth.service");
+const { AuthMockService } = require("../services/auth.mock.service");
+const { isMockAuthEnabled } = require("../utils/mock-auth");
+
+function createAuthService() {
+  return isMockAuthEnabled() ? new AuthMockService() : new AuthService();
+}
 
 class AuthController {
-  constructor(authService = new AuthService()) {
+  constructor(authService = createAuthService()) {
     this.authService = authService;
   }
 
