@@ -73,6 +73,15 @@ class RecordsController {
       next(error);
     }
   };
+
+  getHistory = async (req, res, next) => {
+    try {
+      const history = await this.recordService.getHistory(req.user, req.params.recordId);
+      res.json({ success: true, data: history });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 module.exports = RecordsController;

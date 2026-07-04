@@ -14,6 +14,10 @@ class AudioService {
     const audioStorage = await this.storageRepository.saveAudio(file, userId);
     return this.jobService.createJobFromAudio({ userId, audioStorage });
   }
+
+  async processText({ userId, text }) {
+    return this.jobService.createJobFromText({ userId, text });
+  }
 }
 
 module.exports = AudioService;

@@ -57,7 +57,12 @@ class AuthService {
       email: user.email,
       roleId: profile?.role_id || ROLE_IDS.CLIENT,
       role: profile?.roles || { id: ROLE_IDS.CLIENT, name: "Cliente" },
-      profile,
+      profile: profile
+        ? {
+            fullName: profile.full_name ?? null,
+            avatarUrl: profile.avatar_url ?? null,
+          }
+        : null,
     };
   }
 
@@ -171,6 +176,30 @@ class AuthService {
     };
   }
 
+  async changePassword(actor, { currentPassword, newPassword }) {
+    const supabase = this.getSupabase();
+
+    // Verify current password by attempting sign-in
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: actor.email,
+      password: currentPassword,
+    });
+
+    if (signInError) {
+      throw new UnauthorizedError("La contraseña actual es incorrecta");
+    }
+
+    // Update to new password using admin client
+    const admin = getServiceClient();
+    const { error: updateError } = await admin.auth.admin.updateUserById(actor.id, {
+      password: newPassword,
+    });
+
+    if (updateError) {
+      throw new ValidationError("No se pudo actualizar la contraseña");
+    }
+  }
+
   async getMe(actor) {
     const profile = await this.profileRepository.findById(actor.id);
 
@@ -179,13 +208,7 @@ class AuthService {
     }
 
     return {
-      user: {
-        id: actor.id,
-        email: actor.email,
-        roleId: profile.role_id,
-        role: profile.roles,
-        profile,
-      },
+      user: this.formatUser(actor, profile),
     };
   }
 }

@@ -65,6 +65,15 @@ class AuthController {
       next(error);
     }
   };
+
+  changePassword = async (req, res, next) => {
+    try {
+      await this.authService.changePassword(req.user, req.validated.body);
+      res.json({ success: true, message: "Password updated successfully" });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 module.exports = AuthController;

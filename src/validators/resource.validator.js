@@ -106,10 +106,12 @@ const updateRecordSchema = z.object({
       amount: z.number().optional().nullable(),
       currency: z.string().max(10).optional().nullable(),
       data: z.record(z.unknown()).optional(),
+      note: z.string().max(1000).optional().nullable(),
     })
-    .refine((data) => Object.keys(data).length > 0, {
-      message: "At least one field is required",
-    }),
+    .refine((body) => {
+      const { note: _note, ...rest } = body;
+      return Object.keys(rest).length > 0;
+    }, { message: "At least one field is required" }),
 });
 
 const createTagSchema = z.object({

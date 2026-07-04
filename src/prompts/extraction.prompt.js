@@ -1,6 +1,6 @@
 const { getTimezoneContext } = require("../utils/dateContext");
 
-const EXTRACTION_SYSTEM_PROMPT = `Extrae información de audios en español. Responde SOLO JSON.
+const EXTRACTION_SYSTEM_PROMPT = `Extrae información de notas de voz ya transcritas a texto en español. Responde SOLO JSON.
 
 Reglas:
 - Un item por cada tarea, recordatorio, reunión, gasto, ingreso, nota o idea. NUNCA fusiones items.
@@ -19,7 +19,7 @@ function buildExtractionUserMessage(transcription) {
     `Contexto temporal (${timeZone}): ${nowFormatted} (${nowLocalIso})`,
     'Interpreta "mañana" como el día siguiente y "el viernes" como el próximo viernes.',
     "",
-    `Transcripción:\n${transcription}`,
+    `Texto del usuario:\n${transcription}`,
   ].join("\n");
 }
 

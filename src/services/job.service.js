@@ -4,6 +4,7 @@ const { JOB_STATUS } = require("../constants/jobs");
 const {
   NotFoundError,
   ConflictError,
+  ValidationError,
 } = require("../errors/AppError");
 const {
   assertResourceAccess,
@@ -26,6 +27,28 @@ class JobService {
       progress: 0,
       audio_url: audioStorage.url,
       audio_path: audioStorage.path,
+    });
+
+    return {
+      jobId: job.id,
+      status: job.status,
+    };
+  }
+
+  async createJobFromText({ userId, text }) {
+    const transcription = text.trim();
+
+    if (!transcription) {
+      throw new ValidationError("Text is required");
+    }
+
+    const job = await this.jobRepository.create({
+      user_id: userId,
+      status: JOB_STATUS.PENDING,
+      progress: 0,
+      transcription,
+      audio_url: null,
+      audio_path: null,
     });
 
     return {
