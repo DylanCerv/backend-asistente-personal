@@ -106,6 +106,28 @@ class AuthMockService {
     };
   }
 
+  async signInWithOAuth({ provider, idToken }) {
+    const tokenSuffix = idToken.slice(-12) || crypto.randomUUID();
+    const normalizedEmail = `${provider}.${tokenSuffix}@social.mock`.toLowerCase();
+    let user = usersByEmail.get(normalizedEmail);
+
+    if (!user) {
+      user = {
+        id: createUserId(),
+        email: normalizedEmail,
+        password: crypto.randomBytes(16).toString("hex"),
+        fullName: provider === "apple" ? "Apple User" : "Google User",
+      };
+      usersByEmail.set(normalizedEmail, user);
+      usersById.set(user.id, user);
+    }
+
+    return {
+      user: formatUser(user),
+      session: createSession(user.id, user.email),
+    };
+  }
+
   async login({ email, password }) {
     const normalizedEmail = email.trim().toLowerCase();
     const user = usersByEmail.get(normalizedEmail);

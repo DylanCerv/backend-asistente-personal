@@ -129,6 +129,38 @@ class AuthService {
     };
   }
 
+  async signInWithOAuth({ provider, idToken, nonce }) {
+    const supabase = this.getSupabase();
+    const credentials = { provider, token: idToken };
+
+    if (nonce) {
+      credentials.nonce = nonce;
+    }
+
+    const { data, error } = await supabase.auth.signInWithIdToken(credentials);
+
+    if (error) {
+      throw this.mapAuthError(error);
+    }
+
+    if (!data.user || !data.session) {
+      throw new UnauthorizedError("Social login failed");
+    }
+
+    const fullName =
+      data.user.user_metadata?.full_name ||
+      data.user.user_metadata?.name ||
+      data.user.user_metadata?.given_name ||
+      "";
+
+    const profile = await this.ensureProfile(data.user, fullName);
+
+    return {
+      user: this.formatUser(data.user, profile),
+      session: this.formatSession(data.session),
+    };
+  }
+
   async login({ email, password }) {
     const supabase = this.getSupabase();
 

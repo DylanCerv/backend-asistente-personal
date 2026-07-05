@@ -74,6 +74,41 @@ class AuthController {
       next(error);
     }
   };
+
+  googleSignIn = async (req, res, next) => {
+    try {
+      const { idToken } = req.validated.body;
+      const result = await this.authService.signInWithOAuth({
+        provider: "google",
+        idToken,
+      });
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  appleSignIn = async (req, res, next) => {
+    try {
+      const { idToken, nonce } = req.validated.body;
+      const result = await this.authService.signInWithOAuth({
+        provider: "apple",
+        idToken,
+        nonce,
+      });
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 module.exports = AuthController;

@@ -28,9 +28,17 @@ const changePasswordSchema = z.object({
   }),
 });
 
+const socialAuthSchema = z.object({
+  body: z.object({
+    idToken: z.string().min(1, "idToken is required"),
+    nonce: z.string().min(1).optional(),
+  }),
+});
+
 module.exports = {
   registerSchema,
   loginSchema,
   refreshSchema,
   changePasswordSchema,
+  socialAuthSchema,
 };
