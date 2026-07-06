@@ -4,6 +4,7 @@ const ALLOWED_FIELDS = [
   "language",
   "push_notifications",
   "reminder_notifications",
+  "reminder_alert_style",
   "auto_send_audio",
   "biometric_lock",
   "preferred_name",

@@ -13,6 +13,7 @@ const updateSettingsSchema = z.object({
       language: z.enum(["es", "en"]).optional(),
       push_notifications: z.boolean().optional(),
       reminder_notifications: z.boolean().optional(),
+      reminder_alert_style: z.enum(["sound", "vibration", "both"]).optional(),
       auto_send_audio: z.boolean().optional(),
       biometric_lock: z.boolean().optional(),
       preferred_name: z.string().max(80).optional(),
