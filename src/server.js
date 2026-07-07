@@ -7,6 +7,7 @@ const { isMockAuthEnabled } = require("./utils/mock-auth");
 validateEnv();
 
 const createApp = require("./app");
+const JobWorker = require("./workers/job.worker");
 const logger = createLogger("server");
 
 function getLocalNetworkIp() {
@@ -24,6 +25,7 @@ function getLocalNetworkIp() {
 }
 
 const app = createApp();
+const worker = new JobWorker();
 
 const server = app.listen(env.port, "0.0.0.0", () => {
   const localIp = getLocalNetworkIp();
@@ -42,10 +44,13 @@ const server = app.listen(env.port, "0.0.0.0", () => {
       "DEV_MOCK_AUTH=true — login/register use in-memory users (no Supabase). Disable for production."
     );
   }
+
+  worker.start();
 });
 
 function shutdown(signal) {
   logger.info(`Received ${signal}, shutting down server`);
+  worker.stop();
   server.close(() => {
     process.exit(0);
   });

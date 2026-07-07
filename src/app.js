@@ -7,6 +7,9 @@ const {
   errorHandler,
 } = require("./middlewares/errorHandler.middleware");
 const { env } = require("./config");
+const { createLogger } = require("./utils/logger");
+
+const httpLogger = createLogger("http");
 
 function createApp() {
   const app = express();
@@ -17,6 +20,11 @@ function createApp() {
       credentials: true,
     })
   );
+
+  app.use((req, _res, next) => {
+    httpLogger.info(`${req.method} ${req.path}`);
+    next();
+  });
 
   app.use(express.json({ limit: "1mb" }));
 
