@@ -29,6 +29,8 @@ PATCH /api/profiles/:profileId/role
 
 ## Consultar roles
 
+Requiere autenticación (`Authorization: Bearer <token>`).
+
 ```http
 GET /api/roles
 ```

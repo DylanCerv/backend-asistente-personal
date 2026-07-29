@@ -31,7 +31,10 @@ const server = app.listen(env.port, "0.0.0.0", () => {
   const localIp = getLocalNetworkIp();
 
   logger.info(`API server listening on http://localhost:${env.port}`);
-  logger.info(`API docs: http://localhost:${env.port}/api/docs`);
+
+  if (env.nodeEnv !== "production") {
+    logger.info(`API docs: http://localhost:${env.port}/api/docs`);
+  }
 
   if (localIp) {
     logger.info(
