@@ -5,6 +5,8 @@ const ALLOWED_FIELDS = [
   "push_notifications",
   "reminder_notifications",
   "reminder_alert_style",
+  "reminder_alert_sound",
+  "reminder_alert_vibration",
   "auto_send_audio",
   "biometric_lock",
   "preferred_name",

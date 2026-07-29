@@ -2,6 +2,7 @@ const { getAnonClient, getServiceClient } = require("../clients/supabase.client"
 const ProfileRepository = require("../repositories/profile.repository");
 const { ROLE_IDS } = require("../constants/roles");
 const {
+  AppError,
   ValidationError,
   UnauthorizedError,
   ConflictError,
@@ -20,7 +21,31 @@ class AuthService {
     return client;
   }
 
+  isNetworkAuthError(error) {
+    const message = (error?.message || "").toLowerCase();
+    const causeCode = error?.cause?.code || error?.code;
+
+    return (
+      message.includes("fetch failed") ||
+      message.includes("network request failed") ||
+      message.includes("failed to fetch") ||
+      causeCode === "ENOTFOUND" ||
+      causeCode === "ECONNREFUSED" ||
+      causeCode === "ETIMEDOUT" ||
+      causeCode === "ENETUNREACH" ||
+      causeCode === "EAI_AGAIN"
+    );
+  }
+
   mapAuthError(error) {
+    if (this.isNetworkAuthError(error)) {
+      return new AppError(
+        "No se pudo conectar con el servicio de autenticación. Verifica SUPABASE_URL y tu conexión.",
+        503,
+        "AUTH_SERVICE_UNAVAILABLE"
+      );
+    }
+
     const message = error.message?.toLowerCase() || "";
 
     if (message.includes("already registered") || message.includes("already exists")) {

@@ -14,6 +14,10 @@ const updateSettingsSchema = z.object({
       push_notifications: z.boolean().optional(),
       reminder_notifications: z.boolean().optional(),
       reminder_alert_style: z.enum(["sound", "vibration", "both"]).optional(),
+      reminder_alert_sound: z
+        .enum(["system", "kivo_soft", "kivo_clear", "kivo_urgent"])
+        .optional(),
+      reminder_alert_vibration: z.enum(["normal", "soft", "strong", "alarm"]).optional(),
       auto_send_audio: z.boolean().optional(),
       biometric_lock: z.boolean().optional(),
       preferred_name: z.string().max(80).optional(),
