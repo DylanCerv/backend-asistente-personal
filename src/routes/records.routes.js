@@ -52,6 +52,13 @@ router.delete(
 );
 
 router.get(
+  "/:recordId/history",
+  authMiddleware,
+  validate(recordIdParamSchema),
+  recordsController.getHistory
+);
+
+router.get(
   "/:recordId/tags",
   authMiddleware,
   validate(recordIdParamSchema),

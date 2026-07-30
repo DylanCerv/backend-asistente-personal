@@ -33,8 +33,8 @@ La API incluye documentación interactiva con Swagger UI.
 
 | Recurso | URL |
 |---|---|
-| Swagger UI | `http://localhost:3000/api/docs` |
-| OpenAPI JSON | `http://localhost:3000/api/docs.json` |
+| Swagger UI | `http://localhost:3000/api/docs` (solo si `NODE_ENV` ≠ `production`) |
+| OpenAPI JSON | `http://localhost:3000/api/docs.json` (mismo: desactivado en production) |
 
 La especificación vive en `src/docs/openapi.js`. Para actualizar la documentación al cambiar endpoints, edita ese archivo.
 

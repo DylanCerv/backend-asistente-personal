@@ -142,11 +142,15 @@ class JobRepository {
   }
 
   async resetForRetry(id) {
+    const job = await this.findById(id);
+    const hasAudio = Boolean(job?.audio_path || job?.audio_url);
+
     return this.update(id, {
       status: JOB_STATUS.PENDING,
       progress: 0,
       error: null,
-      transcription: null,
+      // Keep client-provided text jobs; only clear transcription when audio can be re-processed.
+      transcription: hasAudio ? null : job?.transcription ?? null,
       structured_data: null,
     });
   }

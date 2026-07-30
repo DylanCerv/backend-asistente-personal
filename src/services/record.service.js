@@ -1,4 +1,5 @@
 const RecordRepository = require("../repositories/record.repository");
+const RecordChangeRepository = require("../repositories/record-change.repository");
 const { NotFoundError, ValidationError } = require("../errors/AppError");
 const {
   assertResourceAccess,
@@ -7,8 +8,12 @@ const {
 } = require("../utils/accessControl");
 
 class RecordService {
-  constructor(recordRepository = new RecordRepository()) {
+  constructor(
+    recordRepository = new RecordRepository(),
+    recordChangeRepository = new RecordChangeRepository()
+  ) {
     this.recordRepository = recordRepository;
+    this.recordChangeRepository = recordChangeRepository;
   }
 
   async list(actor, { userId, type, limit, offset }) {
@@ -86,7 +91,39 @@ class RecordService {
       throw new ValidationError("No valid fields to update");
     }
 
+    // Merge incoming data with existing data to avoid overwriting unrelated fields
+    if (updates.data !== undefined) {
+      updates.data = { ...(record.data ?? {}), ...updates.data };
+    }
+
+    // Log the change before updating
+    await this.recordChangeRepository.create({
+      recordId,
+      userId: actor.id,
+      previousData: {
+        title: record.title,
+        description: record.description,
+        priority: record.priority,
+        date: record.date,
+        type: record.type,
+        data: record.data,
+      },
+      changeNote: payload.note || null,
+    });
+
     return this.recordRepository.update(recordId, updates);
+  }
+
+  async getHistory(actor, recordId) {
+    const record = await this.recordRepository.findById(recordId);
+
+    if (!record) {
+      throw new NotFoundError("Record not found");
+    }
+
+    assertResourceAccess(actor, record.user_id);
+
+    return this.recordChangeRepository.findByRecordId(recordId);
   }
 
   async remove(actor, recordId) {

@@ -1,7 +1,13 @@
 const AuthService = require("../services/auth.service");
+const { AuthMockService } = require("../services/auth.mock.service");
+const { isMockAuthEnabled } = require("../utils/mock-auth");
+
+function createAuthService() {
+  return isMockAuthEnabled() ? new AuthMockService() : new AuthService();
+}
 
 class AuthController {
-  constructor(authService = new AuthService()) {
+  constructor(authService = createAuthService()) {
     this.authService = authService;
   }
 
@@ -50,6 +56,50 @@ class AuthController {
   me = async (req, res, next) => {
     try {
       const result = await this.authService.getMe(req.user);
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  changePassword = async (req, res, next) => {
+    try {
+      await this.authService.changePassword(req.user, req.validated.body);
+      res.json({ success: true, message: "Password updated successfully" });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  googleSignIn = async (req, res, next) => {
+    try {
+      const { idToken } = req.validated.body;
+      const result = await this.authService.signInWithOAuth({
+        provider: "google",
+        idToken,
+      });
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  appleSignIn = async (req, res, next) => {
+    try {
+      const { idToken, nonce } = req.validated.body;
+      const result = await this.authService.signInWithOAuth({
+        provider: "apple",
+        idToken,
+        nonce,
+      });
 
       res.json({
         success: true,

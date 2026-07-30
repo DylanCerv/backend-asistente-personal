@@ -2,6 +2,7 @@ const { getAnonClient, getServiceClient } = require("../clients/supabase.client"
 const ProfileRepository = require("../repositories/profile.repository");
 const { ROLE_IDS } = require("../constants/roles");
 const {
+  AppError,
   ValidationError,
   UnauthorizedError,
   ConflictError,
@@ -20,7 +21,31 @@ class AuthService {
     return client;
   }
 
+  isNetworkAuthError(error) {
+    const message = (error?.message || "").toLowerCase();
+    const causeCode = error?.cause?.code || error?.code;
+
+    return (
+      message.includes("fetch failed") ||
+      message.includes("network request failed") ||
+      message.includes("failed to fetch") ||
+      causeCode === "ENOTFOUND" ||
+      causeCode === "ECONNREFUSED" ||
+      causeCode === "ETIMEDOUT" ||
+      causeCode === "ENETUNREACH" ||
+      causeCode === "EAI_AGAIN"
+    );
+  }
+
   mapAuthError(error) {
+    if (this.isNetworkAuthError(error)) {
+      return new AppError(
+        "No se pudo conectar con el servicio de autenticación. Verifica SUPABASE_URL y tu conexión.",
+        503,
+        "AUTH_SERVICE_UNAVAILABLE"
+      );
+    }
+
     const message = error.message?.toLowerCase() || "";
 
     if (message.includes("already registered") || message.includes("already exists")) {
@@ -57,7 +82,12 @@ class AuthService {
       email: user.email,
       roleId: profile?.role_id || ROLE_IDS.CLIENT,
       role: profile?.roles || { id: ROLE_IDS.CLIENT, name: "Cliente" },
-      profile,
+      profile: profile
+        ? {
+            fullName: profile.full_name ?? null,
+            avatarUrl: profile.avatar_url ?? null,
+          }
+        : null,
     };
   }
 
@@ -124,6 +154,38 @@ class AuthService {
     };
   }
 
+  async signInWithOAuth({ provider, idToken, nonce }) {
+    const supabase = this.getSupabase();
+    const credentials = { provider, token: idToken };
+
+    if (nonce) {
+      credentials.nonce = nonce;
+    }
+
+    const { data, error } = await supabase.auth.signInWithIdToken(credentials);
+
+    if (error) {
+      throw this.mapAuthError(error);
+    }
+
+    if (!data.user || !data.session) {
+      throw new UnauthorizedError("Social login failed");
+    }
+
+    const fullName =
+      data.user.user_metadata?.full_name ||
+      data.user.user_metadata?.name ||
+      data.user.user_metadata?.given_name ||
+      "";
+
+    const profile = await this.ensureProfile(data.user, fullName);
+
+    return {
+      user: this.formatUser(data.user, profile),
+      session: this.formatSession(data.session),
+    };
+  }
+
   async login({ email, password }) {
     const supabase = this.getSupabase();
 
@@ -171,6 +233,30 @@ class AuthService {
     };
   }
 
+  async changePassword(actor, { currentPassword, newPassword }) {
+    const supabase = this.getSupabase();
+
+    // Verify current password by attempting sign-in
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: actor.email,
+      password: currentPassword,
+    });
+
+    if (signInError) {
+      throw new UnauthorizedError("La contraseña actual es incorrecta");
+    }
+
+    // Update to new password using admin client
+    const admin = getServiceClient();
+    const { error: updateError } = await admin.auth.admin.updateUserById(actor.id, {
+      password: newPassword,
+    });
+
+    if (updateError) {
+      throw new ValidationError("No se pudo actualizar la contraseña");
+    }
+  }
+
   async getMe(actor) {
     const profile = await this.profileRepository.findById(actor.id);
 
@@ -179,13 +265,7 @@ class AuthService {
     }
 
     return {
-      user: {
-        id: actor.id,
-        email: actor.email,
-        roleId: profile.role_id,
-        role: profile.roles,
-        profile,
-      },
+      user: this.formatUser(actor, profile),
     };
   }
 }

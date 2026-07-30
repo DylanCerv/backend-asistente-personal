@@ -13,6 +13,11 @@ const swaggerUiOptions = {
 };
 
 function setupSwagger(app) {
+  // Hide API docs in production — keeps the schema off the public internet.
+  if (process.env.NODE_ENV === "production") {
+    return;
+  }
+
   app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec, swaggerUiOptions));
   app.get("/api/docs.json", (req, res) => {
     res.json(openApiSpec);

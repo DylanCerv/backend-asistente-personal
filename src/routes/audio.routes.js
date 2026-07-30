@@ -6,7 +6,10 @@ const {
   uploadSingleAudio,
   handleUploadErrors,
 } = require("../middlewares/upload.middleware");
-const { audioUploadSchema } = require("../validators/job.validator");
+const {
+  audioUploadSchema,
+  textProcessSchema,
+} = require("../validators/job.validator");
 const { ValidationError } = require("../errors/AppError");
 
 const router = express.Router();
@@ -19,6 +22,15 @@ function requireAudioFile(req, res, next) {
   next();
 }
 
+// Preferred: client already transcribed — text only.
+router.post(
+  "/text",
+  authMiddleware,
+  validate(textProcessSchema),
+  audioController.processText
+);
+
+// Fallback: lightweight speech clip (m4a/AAC) for OpenAI Whisper.
 router.post(
   "/",
   authMiddleware,
