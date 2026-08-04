@@ -137,11 +137,52 @@ class JobProcessorService {
   }
 
   async processJobById(jobId) {
-    const job = await this.jobRepository.findById(jobId);
-    if (!job) {
-      throw new Error("Job not found");
+    let claimed = await this.jobRepository.claimJobIfPending(jobId);
+
+    if (!claimed) {
+      // Orphan recovery: claimed in DB but processor died before work started
+      claimed = await this.jobRepository.reclaimStuckProcessing(jobId);
     }
-    return this.processJob(job);
+
+    if (claimed) {
+      return this.processJob(claimed);
+    }
+
+    // Worker (or another request) already claimed/finished this job — wait for terminal state
+    // so chat does not run extraction twice and create duplicate records.
+    return this.waitForJobTerminal(jobId);
+  }
+
+  async waitForJobTerminal(jobId, { timeoutMs = 90_000, pollMs = 500 } = {}) {
+    const started = Date.now();
+
+    while (Date.now() - started < timeoutMs) {
+      const job = await this.jobRepository.findById(jobId);
+      if (!job) {
+        throw new Error("Job not found");
+      }
+      if (job.status === JOB_STATUS.COMPLETED || job.status === JOB_STATUS.FAILED) {
+        return job;
+      }
+
+      if (job.status === JOB_STATUS.PROCESSING) {
+        const reclaimed = await this.jobRepository.reclaimStuckProcessing(jobId);
+        if (reclaimed) {
+          return this.processJob(reclaimed);
+        }
+      }
+
+      if (job.status === JOB_STATUS.PENDING) {
+        const claimed = await this.jobRepository.claimJobIfPending(jobId);
+        if (claimed) {
+          return this.processJob(claimed);
+        }
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+
+    throw new Error("Job is still processing");
   }
 
   async processNextJob() {

@@ -53,7 +53,7 @@ module.exports = {
       getEnv("OPENAI_CHAT_MODEL", "gpt-4.1-nano"),
     audioStorageBucket: () => getEnv("AUDIO_STORAGE_BUCKET", "audio-uploads"),
     uploadMaxFileSizeMb: Number(getEnv("UPLOAD_MAX_FILE_SIZE_MB", "25")),
-    workerPollIntervalMs: Number(getEnv("WORKER_POLL_INTERVAL_MS", "2000")),
+    workerPollIntervalMs: Number(getEnv("WORKER_POLL_INTERVAL_MS", "500")),
     workerMaxRetries: Number(getEnv("WORKER_MAX_RETRIES", "3")),
     corsOrigin: getEnv("CORS_ORIGIN", "*"),
     defaultTimezone: () => getEnv("DEFAULT_TIMEZONE", "America/Guayaquil"),

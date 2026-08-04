@@ -126,6 +126,58 @@ class JobRepository {
     return data[0];
   }
 
+  /**
+   * Atomically claim a specific pending job (chat/sync path).
+   * Returns null if another worker already claimed or finished it.
+   */
+  async claimJobIfPending(id) {
+    const { data, error } = await this.getClient()
+      .from(this.table)
+      .update({ status: JOB_STATUS.PROCESSING, progress: 10, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("status", JOB_STATUS.PENDING)
+      .is("deleted_at", null)
+      .select("*");
+
+    if (error) {
+      throw error;
+    }
+
+    return data?.[0] || null;
+  }
+
+  /** Reclaim a job stuck in processing with no real progress (orphaned claim). */
+  async reclaimStuckProcessing(id, maxAgeMs = 5000) {
+    const job = await this.findById(id);
+    if (!job || job.status !== JOB_STATUS.PROCESSING) return null;
+
+    const progress = Number(job.progress ?? 0);
+    const updatedAt = job.updated_at ? new Date(job.updated_at).getTime() : 0;
+    const ageMs = Date.now() - updatedAt;
+
+    // Only take over "just claimed" orphans (progress 10), not mid-transcription work.
+    if (progress > 10) return null;
+    if (ageMs < maxAgeMs) return null;
+
+    const { data, error } = await this.getClient()
+      .from(this.table)
+      .update({
+        status: JOB_STATUS.PROCESSING,
+        progress: 10,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .eq("status", JOB_STATUS.PROCESSING)
+      .is("deleted_at", null)
+      .select("*");
+
+    if (error) {
+      throw error;
+    }
+
+    return data?.[0] || null;
+  }
+
   async markFailed(id, errorPayload) {
     return this.update(id, {
       status: JOB_STATUS.FAILED,

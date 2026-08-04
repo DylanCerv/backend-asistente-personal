@@ -34,6 +34,7 @@ Otros campos:
 - title corto ("Visita a María", "Pagar la luz"); sin "Recuérdame…".
 - priority: hora exacta o urgente=high; normal=medium; sin urgencia=low.
 - category SOLO: Personal, Trabajo, Salud, Familia, Finanzas, Educación, Proyectos, General.
+- summary: frase corta en pasado de lo que YA extrajiste (ej. "Registré visita a Juan hoy a las 17:35"). NUNCA preguntes confirmación ni digas "¿Quieres que…?".
 
 Schema:
 {"items":[{"type":"task|meeting|expense|income|note","title":"string","description":"string|null","priority":"low|medium|high","date":"string|null","client":"string|null","project":"string|null","category":"string|null","amount":"number|null","currency":"string|null"}],"summary":"string"}`;
