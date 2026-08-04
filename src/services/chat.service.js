@@ -11,9 +11,24 @@ const logger = createLogger("chat");
 const EDIT_PATTERN =
   /edita|modifica|cambia|actualiza|renombra|mueve|pospón|adelanta|reschedule|postpone|move|update|edit|change|modif/i;
 
-// Matches messages that should trigger creation of new records
-const CREATE_PATTERN =
-  /crea|agrega|añade|anota|apunta|programa|agenda|recordar|recuerd|nuevo|nueva|registra/i;
+// Pure chat / questions about the schedule — do NOT create records
+const CHAT_ONLY_PATTERN =
+  /^(hola|hey|buenas|buenos días|buenas tardes|buenas noches|gracias|ok|vale|listo)\b/i;
+
+const SCHEDULE_QUESTION_PATTERN =
+  /\b(qué tengo|que tengo|qué hay|que hay|cuáles son|muéstrame|muestrame|enséñame|ensename|lista(r)?|resumen|cómo voy|como voy|mis tareas|mi agenda)\b/i;
+
+function shouldCreateRecords(text) {
+  const trimmed = text.trim();
+  if (trimmed.length < 4) return false;
+  if (CHAT_ONLY_PATTERN.test(trimmed)) return false;
+  if (SCHEDULE_QUESTION_PATTERN.test(trimmed)) return false;
+  if (EDIT_PATTERN.test(trimmed) && !/\b(crea|agrega|añade|anota|programa|agenda|nueva|nuevo)\b/i.test(trimmed)) {
+    return false;
+  }
+  // Default for the assistant: actionable phrases are created immediately (no confirmation).
+  return true;
+}
 
 class ChatService {
   constructor(
@@ -47,12 +62,10 @@ class ChatService {
             if (editResult.changes?.description) changes.description = editResult.changes.description;
 
             if (Object.keys(changes).length > 0) {
-              // Merge data to preserve existing fields
               if (changes.data !== undefined) {
                 changes.data = { ...(record.data ?? {}), ...changes.data };
               }
 
-              // Log the change
               await this.recordChangeRepository.create({
                 recordId: record.id,
                 userId,
@@ -68,50 +81,39 @@ class ChatService {
               await this.recordRepository.update(record.id, changes);
 
               const summary = editResult.editSummary || "el registro fue actualizado";
-              const reply = await generateChatReply({
-                message: `El usuario pidió: "${text}". Lo hiciste: ${summary}. Confirma brevemente en primera persona como asistente.`,
-                userName,
-                context,
-              });
-
-              logger.info("Record updated via chat edit intent", {
-                recordId: record.id,
-                userId,
-              });
-
-              return { reply, records: [] };
+              return {
+                reply: `Listo, actualicé: ${summary}.`,
+                records: [],
+              };
             }
           }
         }
       } catch (error) {
-        logger.warn("Edit intent resolution failed, falling through to create", {
+        logger.warn("Edit intent resolution failed, falling through", {
           error: error.message,
         });
       }
     }
 
-    // 2. Generate conversational reply
-    let reply = await generateChatReply({ message: text, userName, context });
-
-    // 3. Try to CREATE new records for actionable messages
-    const shouldCreate = CREATE_PATTERN.test(text) || (
-      !EDIT_PATTERN.test(text) &&
-      /tarea|reuni|cita|gast|ingreso|recordatorio|llamar|pagar|comprar/i.test(text)
-    );
-
-    let createdRecords = [];
-
-    if (shouldCreate) {
+    // 2. Create path — extract + save immediately. Never ask for confirmation.
+    if (shouldCreateRecords(text)) {
       try {
         const created = await this.jobService.createJobFromText({ userId, text });
-        await this.jobProcessor.processJobById(created.jobId);
+        const processed = await this.jobProcessor.processJobById(created.jobId);
+
+        if (processed?.status === "failed") {
+          const failMsg =
+            processed.error?.message ||
+            "No pude registrar eso. Intenta con más detalle.";
+          return { reply: failMsg, records: [] };
+        }
 
         const result = await this.jobService.getJobResult(
           { id: userId, roleId: 0 },
           created.jobId
         );
 
-        createdRecords = result.records || [];
+        const createdRecords = result.records || [];
 
         if (createdRecords.length > 0) {
           const titles = createdRecords
@@ -119,14 +121,30 @@ class ChatService {
             .filter(Boolean)
             .slice(0, 4)
             .join(", ");
-          reply = `${reply.trim()}\n\nListo, ya lo registré: ${titles}.`;
+          return {
+            reply: `Listo, ya lo registré: ${titles}.`,
+            records: createdRecords,
+          };
         }
+
+        return {
+          reply: "No detecté una tarea o cita clara para guardar. Prueba de nuevo con más detalle.",
+          records: [],
+        };
       } catch (error) {
         logger.warn("Chat action creation failed", { error: error.message });
+        return {
+          reply:
+            error.message ||
+            "No pude guardar la actividad. Intenta de nuevo en un momento.",
+          records: [],
+        };
       }
     }
 
-    return { reply, records: createdRecords };
+    // 3. Pure conversation (greetings / schedule questions)
+    const reply = await generateChatReply({ message: text, userName, context });
+    return { reply, records: [] };
   }
 }
 

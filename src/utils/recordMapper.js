@@ -128,12 +128,35 @@ function dateBucket(dateValue) {
   if (Number.isNaN(parsed.getTime())) {
     return dateValue.slice(0, 10) || "none";
   }
-  return [
-    parsed.getFullYear(),
-    parsed.getMonth() + 1,
-    parsed.getDate(),
-    parsed.getHours(),
-  ].join("-");
+
+  // Soft-day defaults → collapse to calendar day so day-only dupes merge.
+  if (
+    parsed.getMinutes() === 0 &&
+    parsed.getSeconds() === 0 &&
+    IMPLICIT_DAY_HOURS.has(parsed.getHours())
+  ) {
+    return `day-${parsed.getFullYear()}-${parsed.getMonth() + 1}-${parsed.getDate()}`;
+  }
+
+  // 15-minute UTC slots so the same instant in Z vs -05:00 shares a key.
+  return `slot-${Math.floor(parsed.getTime() / (15 * 60 * 1000))}`;
+}
+
+function isSameCommitment(a, b) {
+  const titleA = normalizeTitleKey(a.title);
+  const titleB = normalizeTitleKey(b.title);
+  if (!titleA || titleA !== titleB) return false;
+
+  if (!a.date && !b.date) return true;
+  if (!a.date || !b.date) return true;
+
+  const dateA = new Date(a.date);
+  const dateB = new Date(b.date);
+  if (Number.isNaN(dateA.getTime()) || Number.isNaN(dateB.getTime())) return false;
+
+  // Same local day and within 45 minutes → treat as one commitment (LLM often splits location).
+  if (dateA.toDateString() !== dateB.toDateString()) return false;
+  return Math.abs(dateA.getTime() - dateB.getTime()) <= 45 * 60 * 1000;
 }
 
 function pickHigherPriority(a, b) {
@@ -177,13 +200,7 @@ function dedupeItems(items) {
     if (titleKey) {
       for (const [existingKey, existing] of byKey.entries()) {
         if (!existingKey.startsWith(`${titleKey}::`)) continue;
-        const existingBucket = dateBucket(existing.date);
-        const nextBucket = dateBucket(item.date);
-        if (
-          existingBucket === "none" ||
-          nextBucket === "none" ||
-          existingBucket === nextBucket
-        ) {
+        if (isSameCommitment(existing, item)) {
           byKey.set(existingKey, mergeDuplicateItems(existing, item));
           merged = true;
           break;
