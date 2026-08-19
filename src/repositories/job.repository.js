@@ -178,6 +178,23 @@ class JobRepository {
     return data?.[0] || null;
   }
 
+  async findRecentCompletedByUser(userId, limit = 8) {
+    const { data, error } = await this.getClient()
+      .from(this.table)
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", JOB_STATUS.COMPLETED)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw error;
+    }
+
+    return data || [];
+  }
+
   async markFailed(id, errorPayload) {
     return this.update(id, {
       status: JOB_STATUS.FAILED,

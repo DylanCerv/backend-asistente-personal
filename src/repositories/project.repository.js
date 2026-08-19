@@ -1,6 +1,6 @@
 const { getServiceClient } = require("../clients/supabase.client");
 
-class RecordRepository {
+class ProjectRepository {
   constructor(client = null) {
     this.client = client;
   }
@@ -13,7 +13,7 @@ class RecordRepository {
   }
 
   get table() {
-    return "records";
+    return "projects";
   }
 
   async create(payload) {
@@ -44,71 +44,30 @@ class RecordRepository {
     return data;
   }
 
-  async createMany(payloads) {
-    if (!payloads.length) {
-      return [];
-    }
-
-    const { data, error } = await this.getClient()
-      .from(this.table)
-      .insert(payloads)
-      .select("*");
-
-    if (error) {
-      throw error;
-    }
-
-    return data || [];
-  }
-
-  async findAllByJobId(jobId) {
+  async findByUserAndTitle(userId, title) {
     const { data, error } = await this.getClient()
       .from(this.table)
       .select("*")
-      .eq("job_id", jobId)
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      throw error;
-    }
-
-    return data || [];
-  }
-
-  async findByJobId(jobId) {
-    const records = await this.findAllByJobId(jobId);
-    return records[0] || null;
-  }
-
-  async findRecentByUser(userId, { limit = 100, types = ["task", "meeting", "reminder"] } = {}) {
-    const { data, error } = await this.getClient()
-      .from(this.table)
-      .select("id, type, title, description, date, project, client, data, updated_at, created_at")
       .eq("user_id", userId)
-      .in("type", types)
-      .order("updated_at", { ascending: false })
-      .limit(limit);
+      .ilike("title", title)
+      .maybeSingle();
 
     if (error) {
       throw error;
     }
 
-    return data || [];
+    return data;
   }
 
-  async findAll({ userId, type, limit = 50, offset = 0 } = {}) {
+  async findAll({ userId, limit = 50, offset = 0 } = {}) {
     let query = this.getClient()
       .from(this.table)
       .select("*", { count: "exact" })
-      .order("created_at", { ascending: false })
+      .order("title", { ascending: true })
       .range(offset, offset + limit - 1);
 
     if (userId) {
       query = query.eq("user_id", userId);
-    }
-
-    if (type) {
-      query = query.eq("type", type);
     }
 
     const { data, error, count } = await query;
@@ -142,14 +101,6 @@ class RecordRepository {
       throw error;
     }
   }
-
-  async deleteByJobId(jobId) {
-    const { error } = await this.getClient().from(this.table).delete().eq("job_id", jobId);
-
-    if (error) {
-      throw error;
-    }
-  }
 }
 
-module.exports = RecordRepository;
+module.exports = ProjectRepository;

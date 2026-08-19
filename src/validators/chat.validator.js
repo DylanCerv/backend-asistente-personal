@@ -9,6 +9,7 @@ const chatSchema = z.object({
       .max(4000, "message is too long"),
     userName: z.string().trim().max(80).optional(),
     userEmail: z.string().email().optional().or(z.literal("")),
+    timeZone: z.string().trim().max(64).optional(),
     context: z
       .object({
         tasks: z.array(z.any()).optional(),

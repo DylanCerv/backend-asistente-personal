@@ -46,7 +46,7 @@ async function transcribeAudio(filePath) {
   );
 }
 
-async function extractStructuredData(transcription) {
+async function extractStructuredData(transcription, options = {}) {
   const openai = getOpenAIClient();
   const model = env.openaiExtractionModel();
 
@@ -55,13 +55,17 @@ async function extractStructuredData(transcription) {
       const response = await openai.chat.completions.create({
         model,
         temperature: 0,
-        max_tokens: 800,
+        max_tokens: 1000,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
           {
             role: "user",
-            content: buildExtractionUserMessage(transcription),
+            content: buildExtractionUserMessage(
+              transcription,
+              options.compactText,
+              options.pendingAsk
+            ),
           },
         ],
       });

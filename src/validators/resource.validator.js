@@ -44,6 +44,10 @@ const tagIdParamSchema = z.object({
   params: z.object({ tagId: uuidSchema }),
 });
 
+const projectIdParamSchema = z.object({
+  params: z.object({ projectId: uuidSchema }),
+});
+
 const profileIdParamSchema = z.object({
   params: z.object({ profileId: uuidSchema }),
 });
@@ -145,6 +149,26 @@ const attachTagSchema = z.object({
   body: z.object({ tagId: uuidSchema }),
 });
 
+const createProjectSchema = z.object({
+  body: z.object({
+    userId: uuidSchema.optional(),
+    title: z.string().min(1).max(120),
+    description: z.string().max(2000).optional().nullable(),
+  }),
+});
+
+const updateProjectSchema = z.object({
+  params: z.object({ projectId: uuidSchema }),
+  body: z
+    .object({
+      title: z.string().min(1).max(120).optional(),
+      description: z.string().max(2000).optional().nullable(),
+    })
+    .refine((data) => Object.keys(data).length > 0, {
+      message: "At least one field is required",
+    }),
+});
+
 module.exports = {
   paginationQuerySchema,
   jobListQuerySchema,
@@ -162,4 +186,7 @@ module.exports = {
   createTagSchema,
   updateTagSchema,
   attachTagSchema,
+  projectIdParamSchema,
+  createProjectSchema,
+  updateProjectSchema,
 };

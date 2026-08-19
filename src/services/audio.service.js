@@ -16,9 +16,9 @@ class AudioService {
     this.jobProcessor = jobProcessor;
   }
 
-  async processUpload({ userId, file }) {
+  async processUpload({ userId, file, timeZone }) {
     const audioStorage = await this.storageRepository.saveAudio(file, userId);
-    const created = await this.jobService.createJobFromAudio({ userId, audioStorage });
+    const created = await this.jobService.createJobFromAudio({ userId, audioStorage, timeZone });
 
     // Start ASAP — don't wait for the worker poll interval (was up to ~2s).
     void this.jobProcessor.processJobById(created.jobId).catch((error) => {
@@ -31,8 +31,8 @@ class AudioService {
     return created;
   }
 
-  async processText({ userId, text }) {
-    const created = await this.jobService.createJobFromText({ userId, text });
+  async processText({ userId, text, timeZone }) {
+    const created = await this.jobService.createJobFromText({ userId, text, timeZone });
 
     void this.jobProcessor.processJobById(created.jobId).catch((error) => {
       logger.warn("Inline text job processing failed; worker may retry", {

@@ -1,4 +1,6 @@
 const ChatService = require("../services/chat.service");
+const { readRequestTimeZone } = require("../utils/requestTimeZone");
+const { resolveTimeZone } = require("../utils/dateContext");
 
 class ChatController {
   constructor(chatService = new ChatService()) {
@@ -12,14 +14,17 @@ class ChatController {
         message: req.body.message,
         userName: req.body.userName || req.user.profile?.full_name || req.user.email,
         context: req.body.context || {},
+        timeZone: resolveTimeZone(readRequestTimeZone(req)),
       });
 
       res.status(200).json({
         success: true,
         reply: result.reply,
+        needsConfirmation: result.needsConfirmation === true,
         data: {
           reply: result.reply,
           records: result.records,
+          needsConfirmation: result.needsConfirmation === true,
         },
       });
     } catch (error) {

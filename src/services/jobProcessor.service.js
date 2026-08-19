@@ -1,12 +1,9 @@
 const JobRepository = require("../repositories/job.repository");
 const RecordRepository = require("../repositories/record.repository");
 const StorageRepository = require("../repositories/storage.repository");
-const { transcribeAudio, extractStructuredData } = require("../clients/openai.client");
+const CaptureService = require("./capture.service");
+const { transcribeAudio } = require("../clients/openai.client");
 const { JOB_PROGRESS, JOB_STATUS } = require("../constants/jobs");
-const {
-  mapItemToRecordPayload,
-  normalizeExtraction,
-} = require("../utils/recordMapper");
 const { createLogger } = require("../utils/logger");
 
 const logger = createLogger("jobProcessor");
@@ -15,11 +12,13 @@ class JobProcessorService {
   constructor(
     jobRepository = new JobRepository(),
     recordRepository = new RecordRepository(),
-    storageRepository = new StorageRepository()
+    storageRepository = new StorageRepository(),
+    captureService = null
   ) {
     this.jobRepository = jobRepository;
     this.recordRepository = recordRepository;
     this.storageRepository = storageRepository;
+    this.captureService = captureService || new CaptureService(jobRepository, recordRepository);
   }
 
   hasAudioSource(job) {
@@ -72,34 +71,14 @@ class JobProcessorService {
         status: JOB_STATUS.PROCESSING,
       });
 
-      const rawExtraction = await extractStructuredData(transcription);
-      const extraction = normalizeExtraction(rawExtraction);
-
-      if (extraction.items.length === 0) {
-        throw new Error("No se detectaron tareas ni información en el texto");
-      }
-
       await this.jobRepository.update(job.id, {
         progress: JOB_PROGRESS.STRUCTURING,
-        structured_data: extraction,
       });
 
-      await this.jobRepository.update(job.id, {
-        progress: JOB_PROGRESS.SAVING,
-      });
-
-      await this.recordRepository.deleteByJobId(job.id);
-
-      const recordPayloads = extraction.items.map((item) =>
-        mapItemToRecordPayload(item, job)
+      const completedJob = await this.captureService.finalizeJob(
+        { ...job, transcription },
+        transcription
       );
-
-      const records = await this.recordRepository.createMany(recordPayloads);
-
-      const completedJob = await this.jobRepository.markCompleted(job.id, {
-        structured_data: extraction,
-        transcription,
-      });
 
       if (this.hasAudioSource(job)) {
         await this.storageRepository.deleteJobAudio(job);
@@ -111,7 +90,7 @@ class JobProcessorService {
 
       logger.info("Job completed", {
         jobId: job.id,
-        recordsCreated: records.length,
+        action: completedJob?.structured_data?.action || "create",
         source: this.hasAudioSource(job) ? "audio" : "text",
       });
 

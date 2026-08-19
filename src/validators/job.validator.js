@@ -9,7 +9,12 @@ const jobIdParamSchema = z.object({
 });
 
 const audioUploadSchema = z.object({
-  body: z.object({}).optional(),
+  body: z
+    .object({
+      timeZone: z.string().trim().max(64).optional(),
+    })
+    .passthrough()
+    .optional(),
   params: z.object({}).optional(),
   query: z.object({}).optional(),
 });
@@ -21,6 +26,7 @@ const textProcessSchema = z.object({
       .trim()
       .min(1, "text cannot be empty")
       .max(8000, "text is too long"),
+    timeZone: z.string().trim().max(64).optional(),
   }),
   params: z.object({}).optional(),
   query: z.object({}).optional(),

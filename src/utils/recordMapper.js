@@ -1,4 +1,10 @@
 const { RECORD_TYPES } = require("../constants/jobs");
+const {
+  getTimezoneContext,
+  toLocalDateParts,
+  toLocalYmd,
+  formatOffsetIso,
+} = require("./dateContext");
 
 const VALID_PRIORITIES = ["low", "medium", "high"];
 
@@ -37,7 +43,7 @@ const PRIORITY_RANK = { high: 3, medium: 2, low: 1 };
 const TYPE_RANK = { meeting: 4, task: 3, reminder: 2, note: 1, idea: 1, expense: 5, income: 5 };
 
 /** Backend default / soft-day times — NOT real clock times chosen by the user. */
-const IMPLICIT_DAY_HOURS = new Set([0, 5, 9]);
+const IMPLICIT_DAY_HOURS = new Set([0, 5]);
 
 function normalizeCategory(value) {
   if (!value || typeof value !== "string") return "General";
@@ -58,14 +64,46 @@ function looksLikeAppointment(item) {
   return APPOINTMENT_PATTERN.test(haystack);
 }
 
+function isUtcMidnight(dateValue) {
+  return /T00:00:00(?:\.\d+)?Z$/i.test(String(dateValue).trim());
+}
+
+function calendarPrefix(dateValue) {
+  const match = String(dateValue).trim().match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : null;
+}
+
+function getClock() {
+  return getTimezoneContext();
+}
+
 /** True only when the user likely specified a real clock time (not day-only defaults). */
-function hasExplicitClockTime(dateValue) {
+function inferEveningParts(parts, clock, transcription) {
+  const hour = Number(parts.hour);
+  if (!Number.isFinite(hour) || hour >= 12) return parts;
+  if (/am|a\.?\s*m\.?|de la ma[nñ]ana/i.test(String(transcription || ""))) return parts;
+
+  const nowHour = Number((clock?.nowLocalIso || "").slice(11, 13)) || 0;
+  const saidEvening = /tarde|noche|p\.?\s*m\.?|\bpm\b/i.test(String(transcription || ""));
+  if (nowHour < 12 && !saidEvening) return parts;
+
+  const pmHour = hour === 0 ? 12 : hour + 12;
+  const hourText = String(pmHour).padStart(2, "0");
+  return {
+    ...parts,
+    hour: hourText,
+    time: `${hourText}:${parts.minute}:${parts.second}`,
+  };
+}
+
+function hasExplicitClockTime(dateValue, timeZone = getClock().timeZone) {
   if (!dateValue || typeof dateValue !== "string") return false;
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue.trim())) return false;
-  const parsed = new Date(dateValue);
-  if (Number.isNaN(parsed.getTime())) return false;
-  if (parsed.getMinutes() !== 0 || parsed.getSeconds() !== 0) return true;
-  if (IMPLICIT_DAY_HOURS.has(parsed.getHours())) return false;
+  if (isUtcMidnight(dateValue)) return false;
+  const parts = toLocalDateParts(dateValue, timeZone);
+  if (!parts) return false;
+  if (Number(parts.minute) !== 0 || Number(parts.second) !== 0) return true;
+  if (IMPLICIT_DAY_HOURS.has(Number(parts.hour))) return false;
   return true;
 }
 
@@ -91,20 +129,23 @@ function normalizeItemType(item) {
 }
 
 /** Force day-only dates onto the soft-day 05:00 slot used by the app. */
-function normalizeItemDate(item) {
+function normalizeItemDate(item, clock = getClock(), transcription = "") {
   if (!item.date || typeof item.date !== "string") return null;
-  if (hasExplicitClockTime(item.date)) return item.date;
 
-  const parsed = new Date(item.date);
-  if (Number.isNaN(parsed.getTime())) {
-    const day = item.date.slice(0, 10);
-    return /^\d{4}-\d{2}-\d{2}$/.test(day) ? `${day}T05:00:00-05:00` : null;
+  const { timeZone, utcOffset } = clock;
+
+  if (hasExplicitClockTime(item.date, timeZone)) {
+    const parts = toLocalDateParts(item.date, timeZone);
+    if (!parts) return item.date;
+    const shifted = inferEveningParts(parts, clock, transcription);
+    return formatOffsetIso(shifted.ymd, shifted.time, utcOffset);
   }
 
-  const year = parsed.getFullYear();
-  const month = String(parsed.getMonth() + 1).padStart(2, "0");
-  const day = String(parsed.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}T05:00:00-05:00`;
+  const ymd = isUtcMidnight(item.date)
+    ? calendarPrefix(item.date)
+    : toLocalYmd(item.date, timeZone);
+  if (!ymd) return null;
+  return formatOffsetIso(ymd, "05:00:00", utcOffset);
 }
 
 function normalizeTitleKey(title) {
@@ -122,23 +163,23 @@ function normalizeTitleKey(title) {
     .trim();
 }
 
-function dateBucket(dateValue) {
+function dateBucket(dateValue, clock = getClock()) {
   if (!dateValue || typeof dateValue !== "string") return "none";
-  const parsed = new Date(dateValue);
-  if (Number.isNaN(parsed.getTime())) {
+  const parts = toLocalDateParts(dateValue, clock.timeZone);
+  if (!parts) {
     return dateValue.slice(0, 10) || "none";
   }
 
-  // Soft-day defaults → collapse to calendar day so day-only dupes merge.
   if (
-    parsed.getMinutes() === 0 &&
-    parsed.getSeconds() === 0 &&
-    IMPLICIT_DAY_HOURS.has(parsed.getHours())
+    Number(parts.minute) === 0 &&
+    Number(parts.second) === 0 &&
+    IMPLICIT_DAY_HOURS.has(Number(parts.hour))
   ) {
-    return `day-${parsed.getFullYear()}-${parsed.getMonth() + 1}-${parsed.getDate()}`;
+    return `day-${parts.ymd}`;
   }
 
-  // 15-minute UTC slots so the same instant in Z vs -05:00 shares a key.
+  const parsed = new Date(dateValue);
+  if (Number.isNaN(parsed.getTime())) return `day-${parts.ymd}`;
   return `slot-${Math.floor(parsed.getTime() / (15 * 60 * 1000))}`;
 }
 
@@ -154,8 +195,10 @@ function isSameCommitment(a, b) {
   const dateB = new Date(b.date);
   if (Number.isNaN(dateA.getTime()) || Number.isNaN(dateB.getTime())) return false;
 
-  // Same local day and within 45 minutes → treat as one commitment (LLM often splits location).
-  if (dateA.toDateString() !== dateB.toDateString()) return false;
+  const clock = getClock();
+  const dayA = toLocalYmd(a.date, clock.timeZone);
+  const dayB = toLocalYmd(b.date, clock.timeZone);
+  if (!dayA || dayA !== dayB) return false;
   return Math.abs(dateA.getTime() - dateB.getTime()) <= 45 * 60 * 1000;
 }
 
@@ -228,18 +271,34 @@ function cleanTitle(title) {
   return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 }
 
-function normalizeExtractionItem(rawItem) {
+const VALID_RELATIONS = ["child", "next_step", "same"];
+const VALID_ACTIONS = ["create", "update", "link", "ask", "create_project", "complete"];
+
+function normalizeRelation(value) {
+  return VALID_RELATIONS.includes(value) ? value : null;
+}
+
+function normalizeAction(value) {
+  return VALID_ACTIONS.includes(value) ? value : null;
+}
+
+function normalizeExtractionItem(rawItem, clock = getClock(), transcription = "") {
   if (!rawItem || typeof rawItem !== "object") return null;
   if (!rawItem.title || typeof rawItem.title !== "string") return null;
 
   const withDate = {
     ...rawItem,
     title: cleanTitle(rawItem.title),
-    date: normalizeItemDate(rawItem),
+    date: normalizeItemDate(rawItem, clock, transcription),
     category: normalizeCategory(rawItem.category),
     priority: VALID_PRIORITIES.includes(rawItem.priority)
       ? rawItem.priority
       : "medium",
+    relatedTaskId:
+      typeof rawItem.relatedTaskId === "string" && rawItem.relatedTaskId.trim()
+        ? rawItem.relatedTaskId.trim()
+        : null,
+    relation: normalizeRelation(rawItem.relation),
   };
 
   return {
@@ -255,6 +314,11 @@ function mapItemToRecordPayload(item, job) {
 
   if (item.category) {
     metadata.category = normalizeCategory(item.category);
+  }
+
+  if (item.relatedTaskId) {
+    metadata.relatedTaskId = item.relatedTaskId;
+    metadata.relation = item.relation || "next_step";
   }
 
   const type = RECORD_TYPES.includes(item.type) ? item.type : "task";
@@ -275,9 +339,29 @@ function mapItemToRecordPayload(item, job) {
   };
 }
 
-function normalizeExtraction(extraction) {
+function normalizeMatch(match) {
+  if (!match || typeof match !== "object") {
+    return {
+      projectId: null,
+      projectName: null,
+      relatedTaskId: null,
+      relation: null,
+      reason: null,
+    };
+  }
+
+  return {
+    projectId: typeof match.projectId === "string" ? match.projectId : null,
+    projectName: typeof match.projectName === "string" ? match.projectName : null,
+    relatedTaskId: typeof match.relatedTaskId === "string" ? match.relatedTaskId : null,
+    relation: normalizeRelation(match.relation),
+    reason: typeof match.reason === "string" ? match.reason : null,
+  };
+}
+
+function normalizeExtraction(extraction, clock = getClock(), transcription = "") {
   if (!extraction) {
-    return { items: [] };
+    return { items: [], action: "create", needsConfirmation: false };
   }
 
   let rawItems = [];
@@ -290,14 +374,33 @@ function normalizeExtraction(extraction) {
     rawItems = [extraction];
     summary = null;
   } else {
-    return { items: [], summary: null };
+    rawItems = [];
+    summary = extraction.summary || null;
   }
 
-  const normalized = rawItems.map(normalizeExtractionItem).filter(Boolean);
+  const normalized = rawItems
+    .map((item) => normalizeExtractionItem(item, clock, transcription))
+    .filter(Boolean);
+  const action =
+    normalizeAction(extraction.action) ||
+    (extraction.needsConfirmation === true ? "ask" : "create");
+  const needsConfirmation = action === "ask" || extraction.needsConfirmation === true;
+  const options = Array.isArray(extraction.options)
+    ? extraction.options.filter((option) => typeof option === "string" && option.trim()).slice(0, 3)
+    : [];
 
   return {
-    items: dedupeItems(normalized),
+    items: needsConfirmation ? [] : dedupeItems(normalized),
     summary,
+    action: needsConfirmation ? "ask" : action,
+    needsConfirmation,
+    question:
+      typeof extraction.question === "string" && extraction.question.trim()
+        ? extraction.question.trim()
+        : null,
+    options,
+    match: normalizeMatch(extraction.match),
+    draftItems: needsConfirmation ? dedupeItems(normalized) : [],
   };
 }
 
@@ -305,6 +408,8 @@ module.exports = {
   mapItemToRecordPayload,
   normalizeExtraction,
   normalizeItemType,
+  normalizeItemDate,
   normalizeCategory,
   dedupeItems,
+  hasExplicitClockTime,
 };

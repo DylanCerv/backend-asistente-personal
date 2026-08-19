@@ -20,13 +20,14 @@ class JobService {
     this.recordRepository = recordRepository;
   }
 
-  async createJobFromAudio({ userId, audioStorage }) {
+  async createJobFromAudio({ userId, audioStorage, timeZone }) {
     const job = await this.jobRepository.create({
       user_id: userId,
       status: JOB_STATUS.PENDING,
       progress: 0,
       audio_url: audioStorage.url,
       audio_path: audioStorage.path,
+      time_zone: timeZone || null,
     });
 
     return {
@@ -35,7 +36,7 @@ class JobService {
     };
   }
 
-  async createJobFromText({ userId, text }) {
+  async createJobFromText({ userId, text, timeZone }) {
     const transcription = text.trim();
 
     if (!transcription) {
@@ -49,6 +50,7 @@ class JobService {
       transcription,
       audio_url: null,
       audio_path: null,
+      time_zone: timeZone || null,
     });
 
     return {
