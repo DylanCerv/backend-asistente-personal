@@ -1,3 +1,5 @@
+require("./config/timezone");
+
 const os = require("os");
 
 const { env, validateEnv } = require("./config");
@@ -8,6 +10,7 @@ validateEnv();
 
 const createApp = require("./app");
 const JobWorker = require("./workers/job.worker");
+const NotificationWorker = require("./workers/notification.worker");
 const logger = createLogger("server");
 
 function getLocalNetworkIp() {
@@ -25,12 +28,14 @@ function getLocalNetworkIp() {
 }
 
 const app = createApp();
-const worker = new JobWorker();
+const jobWorker = new JobWorker();
+const notificationWorker = new NotificationWorker();
 
 const server = app.listen(env.port, "0.0.0.0", () => {
   const localIp = getLocalNetworkIp();
 
   logger.info(`API server listening on http://localhost:${env.port}`);
+  logger.info(`Timezone: ${process.env.TZ || "system default"}`);
 
   if (env.nodeEnv !== "production") {
     logger.info(`API docs: http://localhost:${env.port}/api/docs`);
@@ -48,12 +53,14 @@ const server = app.listen(env.port, "0.0.0.0", () => {
     );
   }
 
-  worker.start();
+  jobWorker.start();
+  notificationWorker.start();
 });
 
 function shutdown(signal) {
   logger.info(`Received ${signal}, shutting down server`);
-  worker.stop();
+  jobWorker.stop();
+  notificationWorker.stop();
   server.close(() => {
     process.exit(0);
   });

@@ -1,4 +1,8 @@
 const SettingsRepository = require("../repositories/settings.repository");
+const NotificationScheduleService = require("./notificationSchedule.service");
+const { createLogger } = require("../utils/logger");
+
+const logger = createLogger("settingsService");
 
 const ALLOWED_FIELDS = [
   "language",
@@ -14,8 +18,12 @@ const ALLOWED_FIELDS = [
 ];
 
 class SettingsService {
-  constructor(settingsRepository = new SettingsRepository()) {
+  constructor(
+    settingsRepository = new SettingsRepository(),
+    notificationScheduleService = new NotificationScheduleService()
+  ) {
     this.settingsRepository = settingsRepository;
+    this.notificationScheduleService = notificationScheduleService;
   }
 
   async getSettings(actor) {
@@ -29,7 +37,23 @@ class SettingsService {
         updates[field] = payload[field];
       }
     }
-    return this.settingsRepository.upsert(actor.id, updates);
+    const settings = await this.settingsRepository.upsert(actor.id, updates);
+
+    if (
+      updates.push_notifications !== undefined ||
+      updates.reminder_notifications !== undefined
+    ) {
+      try {
+        await this.notificationScheduleService.rebuildForUser(actor.id);
+      } catch (error) {
+        logger.warn("Notification rebuild after settings update failed", {
+          userId: actor.id,
+          error: error.message,
+        });
+      }
+    }
+
+    return settings;
   }
 }
 

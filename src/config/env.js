@@ -55,6 +55,9 @@ module.exports = {
     uploadMaxFileSizeMb: Number(getEnv("UPLOAD_MAX_FILE_SIZE_MB", "25")),
     workerPollIntervalMs: Number(getEnv("WORKER_POLL_INTERVAL_MS", "500")),
     workerMaxRetries: Number(getEnv("WORKER_MAX_RETRIES", "3")),
+    notificationPollIntervalMs: Number(
+      getEnv("NOTIFICATION_POLL_INTERVAL_MS", "5000")
+    ),
     corsOrigin: getEnv("CORS_ORIGIN", "*"),
     defaultTimezone: () => getEnv("DEFAULT_TIMEZONE", "America/Guayaquil"),
   },
