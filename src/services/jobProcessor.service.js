@@ -2,6 +2,7 @@ const JobRepository = require("../repositories/job.repository");
 const RecordRepository = require("../repositories/record.repository");
 const StorageRepository = require("../repositories/storage.repository");
 const CaptureService = require("./capture.service");
+const NotificationScheduleService = require("./notificationSchedule.service");
 const { transcribeAudio } = require("../clients/openai.client");
 const { JOB_PROGRESS, JOB_STATUS } = require("../constants/jobs");
 const { createLogger } = require("../utils/logger");
@@ -13,12 +14,14 @@ class JobProcessorService {
     jobRepository = new JobRepository(),
     recordRepository = new RecordRepository(),
     storageRepository = new StorageRepository(),
-    captureService = null
+    captureService = null,
+    notificationScheduleService = new NotificationScheduleService()
   ) {
     this.jobRepository = jobRepository;
     this.recordRepository = recordRepository;
     this.storageRepository = storageRepository;
     this.captureService = captureService || new CaptureService(jobRepository, recordRepository);
+    this.notificationScheduleService = notificationScheduleService;
   }
 
   hasAudioSource(job) {
@@ -85,6 +88,15 @@ class JobProcessorService {
         await this.jobRepository.update(job.id, {
           audio_url: null,
           audio_path: null,
+        });
+      }
+
+      try {
+        await this.notificationScheduleService.rebuildForUser(job.user_id);
+      } catch (scheduleError) {
+        logger.warn("Notification rebuild after job failed", {
+          jobId: job.id,
+          error: scheduleError.message,
         });
       }
 

@@ -1,19 +1,36 @@
 const RecordRepository = require("../repositories/record.repository");
 const RecordChangeRepository = require("../repositories/record-change.repository");
+const NotificationScheduleService = require("./notificationSchedule.service");
 const { NotFoundError, ValidationError } = require("../errors/AppError");
 const {
   assertResourceAccess,
   resolveListUserId,
   resolveTargetUserId,
 } = require("../utils/accessControl");
+const { createLogger } = require("../utils/logger");
+
+const logger = createLogger("recordService");
 
 class RecordService {
   constructor(
     recordRepository = new RecordRepository(),
-    recordChangeRepository = new RecordChangeRepository()
+    recordChangeRepository = new RecordChangeRepository(),
+    notificationScheduleService = new NotificationScheduleService()
   ) {
     this.recordRepository = recordRepository;
     this.recordChangeRepository = recordChangeRepository;
+    this.notificationScheduleService = notificationScheduleService;
+  }
+
+  async rebuildNotifications(userId) {
+    try {
+      await this.notificationScheduleService.rebuildForUser(userId);
+    } catch (error) {
+      logger.warn("Notification schedule rebuild skipped", {
+        userId,
+        error: error.message,
+      });
+    }
   }
 
   async list(actor, { userId, type, limit, offset }) {
@@ -42,7 +59,7 @@ class RecordService {
   async create(actor, payload) {
     const userId = resolveTargetUserId(actor, payload.userId);
 
-    return this.recordRepository.create({
+    const record = await this.recordRepository.create({
       user_id: userId,
       job_id: payload.jobId || null,
       type: payload.type,
@@ -56,6 +73,9 @@ class RecordService {
       currency: payload.currency,
       data: payload.data || {},
     });
+
+    await this.rebuildNotifications(userId);
+    return record;
   }
 
   async update(actor, recordId, payload) {
@@ -91,12 +111,10 @@ class RecordService {
       throw new ValidationError("No valid fields to update");
     }
 
-    // Merge incoming data with existing data to avoid overwriting unrelated fields
     if (updates.data !== undefined) {
       updates.data = { ...(record.data ?? {}), ...updates.data };
     }
 
-    // Log the change before updating
     await this.recordChangeRepository.create({
       recordId,
       userId: actor.id,
@@ -111,7 +129,9 @@ class RecordService {
       changeNote: payload.note || null,
     });
 
-    return this.recordRepository.update(recordId, updates);
+    const updated = await this.recordRepository.update(recordId, updates);
+    await this.rebuildNotifications(record.user_id);
+    return updated;
   }
 
   async getHistory(actor, recordId) {
@@ -136,6 +156,7 @@ class RecordService {
     assertResourceAccess(actor, record.user_id);
 
     await this.recordRepository.delete(recordId);
+    await this.rebuildNotifications(record.user_id);
 
     return { id: recordId, deleted: true };
   }
